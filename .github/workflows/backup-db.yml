@@ -2,7 +2,7 @@ name: Backup Railway Postgres to GitHub
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '30 20 * * *'
   workflow_dispatch:
 
 jobs:
