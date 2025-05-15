@@ -1,5 +1,8 @@
 name: Backup Railway Postgres to GitHub
 
+permissions:
+  contents: write
+
 on:
   schedule:
     - cron: '30 20 * * *'
