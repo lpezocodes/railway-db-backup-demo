@@ -1,5 +1,8 @@
 name: Auto-Restore on Disaster Detection
 
+permissions:
+  contents: read 
+  actions: write
 on:
   schedule:
     - cron: '33 20 * * *'
