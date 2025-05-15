@@ -1,0 +1,39 @@
+name: Simulate Disaster (Drop Tables)
+
+on:
+  schedule:
+    - cron: '*/6 * * * *'
+  workflow_dispatch:
+
+jobs:
+  nuke-db:
+    runs-on: ubuntu-latest
+    env:
+      PGHOST: ${{ secrets.PGHOST }}
+      PGPORT: ${{ secrets.PGPORT }}
+      PGDATABASE: ${{ secrets.PGDATABASE }}
+      PGUSER: ${{ secrets.PGUSER }}
+      PGPASSWORD: ${{ secrets.PGPASSWORD }}
+
+    steps:
+      - name: Install PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Prevent overlap with lockfile
+        run: |
+          LOCKFILE="/tmp/disaster.lock"
+          if [ -e "$LOCKFILE" ] && [ "$(find "$LOCKFILE" -mmin -6)" ]; then
+            echo "⛔ Another disaster job is already running. Exiting."
+            exit 0
+          fi
+          touch "$LOCKFILE"
+
+      - name: Drop tables
+        run: |
+          echo "☠️ Simulating disaster..."
+          psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -c "DROP TABLE IF EXISTS orders;"
+          psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -c "DROP TABLE IF EXISTS users;"
+          echo "🔥 Tables nuked."
+
+      - name: Cleanup lockfile
+        run: rm -f /tmp/disaster.lock

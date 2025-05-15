@@ -1,0 +1,58 @@
+name: Backup Railway Postgres to GitHub
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      PGHOST: ${{ secrets.PGHOST }}
+      PGPORT: ${{ secrets.PGPORT }}
+      PGDATABASE: ${{ secrets.PGDATABASE }}
+      PGUSER: ${{ secrets.PGUSER }}
+      PGPASSWORD: ${{ secrets.PGPASSWORD }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Prevent overlap with lockfile
+        run: |
+          LOCKFILE="/tmp/backup.lock"
+          if [ -e "$LOCKFILE" ] && [ "$(find "$LOCKFILE" -mmin -5)" ]; then
+            echo "⛔ Another backup job is already running. Exiting."
+            exit 0
+          fi
+          touch "$LOCKFILE"
+
+      - name: Dump full database (compressed)
+        run: |
+          mkdir -p backup
+          pg_dump -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE | gzip > backup/db_backup_$(date +%F_%H-%M-%S).sql.gz
+
+      - name: Dump schema only (versioned)
+        run: |
+          mkdir -p schema
+          pg_dump -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE --schema-only > schema/db_schema_$(date +%F_%H-%M-%S).sql
+
+      - name: Delete old backups and schema dumps
+        run: |
+          find backup/ -type f -name "*.sql.gz" -mmin +60 -exec rm {} \;
+          find schema/ -type f -name "*.sql" -mmin +60 -exec rm {} \;
+
+      - name: Commit backup and schema
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git add backup/ schema/
+          git commit -m "Backup + schema on $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
+          git push
+
+      - name: Cleanup lockfile
+        run: rm -f /tmp/backup.lock

@@ -1,0 +1,49 @@
+name: Restore Database from Backup
+
+on:
+  workflow_dispatch:
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    env:
+      PGHOST: ${{ secrets.PGHOST }}
+      PGPORT: ${{ secrets.PGPORT }}
+      PGDATABASE: ${{ secrets.PGDATABASE }}
+      PGUSER: ${{ secrets.PGUSER }}
+      PGPASSWORD: ${{ secrets.PGPASSWORD }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Prevent overlap with lockfile
+        run: |
+          LOCKFILE="/tmp/restore.lock"
+          if [ -e "$LOCKFILE" ] && [ "$(find "$LOCKFILE" -mmin -6)" ]; then
+            echo "⛔ Another restore job is already running. Exiting."
+            exit 0
+          fi
+          touch "$LOCKFILE"
+
+      - name: Restore latest backup
+        run: |
+          LATEST_DUMP=$(ls -t backup/*.sql.gz | head -n 1)
+          if [ -z "$LATEST_DUMP" ]; then
+            echo "❌ No backup file found."
+            exit 1
+          fi
+          echo "🔄 Restoring from $LATEST_DUMP..."
+          gunzip -c "$LATEST_DUMP" | psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE"
+          echo "✅ Restore complete."
+
+      - name: Confirm restore with user count
+        run: |
+          echo "📊 Checking users table..."
+          psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT COUNT(*) FROM users;"
+
+      - name: Cleanup lockfile
+        run: rm -f /tmp/restore.lock

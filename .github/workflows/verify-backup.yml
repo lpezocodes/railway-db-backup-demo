@@ -1,0 +1,56 @@
+name: Verify Backup Integrity
+
+on:
+  schedule:
+    - cron: '*/7 * * * *'
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Prevent overlap with lockfile
+        run: |
+          LOCKFILE="/tmp/verify.lock"
+          if [ -e "$LOCKFILE" ] && [ "$(find "$LOCKFILE" -mmin -7)" ]; then
+            echo "⛔ Another verify job is already running. Exiting."
+            exit 0
+          fi
+          touch "$LOCKFILE"
+
+      - name: Restore to temp DB
+        run: |
+          LATEST_DUMP=$(ls -t backup/*.sql.gz | head -n 1)
+          if [ -z "$LATEST_DUMP" ]; then
+            echo "❌ No backup file found."
+            exit 1
+          fi
+          echo "🔍 Verifying $LATEST_DUMP"
+          gunzip -c "$LATEST_DUMP" | psql -h localhost -U test -d testdb
+          echo "✅ Verified: Restore succeeded"
+        env:
+          PGPASSWORD: test
+
+      - name: Cleanup lockfile
+        run: rm -f /tmp/verify.lock

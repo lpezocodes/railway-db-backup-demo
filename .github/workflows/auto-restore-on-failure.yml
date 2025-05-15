@@ -1,0 +1,58 @@
+name: Auto-Restore on Disaster Detection
+
+on:
+  schedule:
+    - cron: '*/8 * * * *'
+  workflow_dispatch:
+
+jobs:
+  check-db:
+    runs-on: ubuntu-latest
+    env:
+      PGHOST: ${{ secrets.PGHOST }}
+      PGPORT: ${{ secrets.PGPORT }}
+      PGDATABASE: ${{ secrets.PGDATABASE }}
+      PGUSER: ${{ secrets.PGUSER }}
+      PGPASSWORD: ${{ secrets.PGPASSWORD }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Install PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Prevent overlap with lockfile
+        run: |
+          LOCKFILE="/tmp/auto-restore.lock"
+          if [ -e "$LOCKFILE" ] && [ "$(find "$LOCKFILE" -mmin -8)" ]; then
+            echo "⛔ Another auto-restore check is running. Exiting."
+            exit 0
+          fi
+          touch "$LOCKFILE"
+
+      - name: Check for disaster
+        id: dbcheck
+        run: |
+          echo "🧪 Checking if critical tables exist..."
+          USERS_EXISTS=$(psql -tAc "SELECT to_regclass('public.users');")
+          ORDERS_EXISTS=$(psql -tAc "SELECT to_regclass('public.orders');")
+
+          if [[ "$USERS_EXISTS" == "users" && "$ORDERS_EXISTS" == "orders" ]]; then
+            echo "✅ Tables exist. All good."
+            echo "disaster=false" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Disaster detected. One or more tables are missing."
+            echo "disaster=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Trigger restore workflow
+        if: steps.dbcheck.outputs.disaster == 'true'
+        run: |
+          echo "🚨 Triggering restore workflow..."
+          curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            https://api.github.com/repos/${{ github.repository }}/actions/workflows/restore-db.yml/dispatches \
+            -d '{"ref":"main"}'
+
+      - name: Cleanup lockfile
+        run: rm -f /tmp/auto-restore.lock
