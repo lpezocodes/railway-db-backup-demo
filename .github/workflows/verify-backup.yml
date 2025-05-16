@@ -2,7 +2,7 @@ name: Verify Backup Integrity
 
 on:
   schedule:
-    - cron: '32 20 * * *'
+    - cron: '41 14 * * *'
   workflow_dispatch:
 
 jobs:

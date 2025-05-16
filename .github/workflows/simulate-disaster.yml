@@ -2,7 +2,7 @@ name: Simulate Disaster (Drop Tables)
 
 on:
   schedule:
-    - cron: '31 20 * * *'
+    - cron: '42 14 * * *'
   workflow_dispatch:
 
 jobs:
