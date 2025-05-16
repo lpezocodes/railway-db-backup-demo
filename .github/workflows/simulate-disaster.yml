@@ -1,9 +1,10 @@
 name: Simulate Disaster (Drop Tables)
 
 on:
-  schedule:
-    - cron: '42 14 * * *'
-  workflow_dispatch:
+  workflow_run:
+    workflows: ["Verify Backup Integrity"]
+    types:
+      - completed
 
 jobs:
   nuke-db:

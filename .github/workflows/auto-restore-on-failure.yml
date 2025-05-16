@@ -1,12 +1,14 @@
 name: Auto-Restore on Disaster Detection
 
 permissions:
-  contents: read 
+  contents: read
   actions: write
+
 on:
-  schedule:
-    - cron: '43 14 * * *'
-  workflow_dispatch:
+  workflow_run:
+    workflows: ["Simulate Disaster (Drop Tables)"]
+    types:
+      - completed
 
 jobs:
   check-db:

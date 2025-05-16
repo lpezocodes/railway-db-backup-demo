@@ -1,9 +1,10 @@
 name: Verify Backup Integrity
 
 on:
-  schedule:
-    - cron: '41 14 * * *'
-  workflow_dispatch:
+  workflow_run:
+    workflows: ["Backup Railway Postgres to GitHub"]
+    types:
+      - completed
 
 jobs:
   verify:
